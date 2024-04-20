@@ -1,0 +1,1158 @@
+﻿USE CUAHANGSACH_ONLINE
+----PROCEDURE
+--Viết procedure, thêm một đơn hàng mới gồm chi tiết đơn hàng và chi tiết thanh toán , trong đó người dùng nhập vào mã khách hàng và các thông tin cần thiết 
+DROP PROC PROC_DONHANG_CTDH_CTTT_INSERT
+CREATE PROCEDURE PROC_DONHANG_CTDH_CTTT_INSERT  
+    @MAKH VARCHAR(10),
+    @MAGIAMGIA_DH VARCHAR(10),
+    @MADIACHI VARCHAR(10),
+	@MATHANHTOAN VARCHAR(10),
+    @XMLData XML ,--nhập theo mẫu cho nhiều chi tiết đơn 
+	@LOAIKHACHHANG BIT ---nhập theo tham số 1 là khách hàng đặc biệt 
+AS
+BEGIN
+    ---
+	SET NOCOUNT ON;
+	DECLARE @MAGIAMGIA_DH_DB VARCHAR(10)
+    DECLARE @MADH VARCHAR(10)
+    DECLARE @MOITAO BIT = 0
+
+    WHILE @MOITAO = 0
+    BEGIN
+        SET @MADH = CONCAT('DH', SUBSTRING(CONVERT(VARCHAR(255), NEWID()), 1, 10))
+		SET @MAGIAMGIA_DH_DB = CONCAT('GG_DB',SUBSTRING(CONVERT(VARCHAR(255), NEWID()), 1, 10) )
+
+        IF NOT EXISTS (SELECT 1 FROM DONHANG WHERE MaDH = @MADH)
+        BEGIN
+            SET @MOITAO = 1
+        END
+		IF NOT EXISTS (SELECT 1 FROM GIAMGIA_DONHANG WHERE MaGiamGia_DH = @MAGIAMGIA_DH_DB)
+		BEGIN
+		SET @MOITAO =1
+		END
+    END
+    ---
+	DECLARE @Date DATETIME = GETDATE()
+
+	-- Thiết lập giá trị mặc định cho thời gian bắt đầu giảm giá là ngày đầu tháng hiện tại
+	DECLARE @StartTime DATETIME = DATEADD(MONTH, DATEDIFF(MONTH, 0, @Date), 0)
+
+	-- Thiết lập giá trị mặc định cho thời gian kết thúc giảm giá là ngày cuối tháng hiện tại
+	DECLARE @EndTime DATETIME = DATEADD(MONTH, DATEDIFF(MONTH, -1, @Date), -1)
+
+	
+	-------------PHẦN CHO INSERT ĐƠN HÀNG
+	IF (EXISTS(SELECT MaKH FROM  DONHANG D WHERE @MAKH=MaKH AND D.TrangThai=N'đã giao' GROUP BY MaKH HAVING COUNT(D.MaDH) > 2) AND (@LOAIKHACHHANG = 1))
+	BEGIN
+	IF ((SELECT COUNT(MaGiamGia_DH) FROM DONHANG WHERE  @MAKH=MaKH AND MaGiamGia_DH LIKE '%GG_DB%' AND MONTH(NgayDat)=MONTH(GETDATE())) = 0 )
+	BEGIN 
+				INSERT INTO GIAMGIA_DONHANG(MaGiamGia_DH, GiaTri,LoaiGiaTri,SoLuongMa,GiaTri_ToiThieu,GiamToiDa,TGBatDau,TGKetThuc,TrangThai)
+			VALUES (@MAGIAMGIA_DH_DB,100000,'GIATRI',1,0,100000,@StartTime,@EndTime,1)
+			INSERT INTO DONHANG (MaDH, MaKH, MaGiamGia_DH, MaDiaChi)
+			VALUES (@MADH,@MAKH,@MAGIAMGIA_DH_DB,@MADIACHI)
+	END
+	ELSE BEGIN PRINT N'MÃ KHÔNG ÁP DỤNG - CHỈ ÁP DỤNG MỖI THÁNG 1 LẦN' END
+	END
+	-------------------------
+	ELSE IF (EXISTS (SELECT MaKH FROM  DONHANG D WHERE  D.TrangThai=N'đã giao' GROUP BY MaKH HAVING COUNT(D.MaDH) > 3) AND (@LOAIKHACHHANG =1))
+	BEGIN
+	IF ((SELECT COUNT(MaGiamGia_DH) FROM DONHANG WHERE @MAKH = MaKH AND MaGiamGia_DH LIKE '%GG_DB%' AND MONTH(NgayDat)=MONTH(GETDATE())) = 0 )
+	BEGIN
+	INSERT INTO GIAMGIA_DONHANG(MaGiamGia_DH, GiaTri,LoaiGiaTri,SoLuongMa,GiaTri_ToiThieu,GiamToiDa,TGBatDau,TGKetThuc,TrangThai)
+	VALUES (@MAGIAMGIA_DH_DB,200000,'GIATRI',1,0,200000,@StartTime,@EndTime,1)
+    INSERT INTO DONHANG (MaDH, MaKH, MaGiamGia_DH, MaDiaChi)
+	VALUES (@MADH,@MAKH,@MAGIAMGIA_DH_DB,@MADIACHI)
+	END
+	ELSE BEGIN PRINT N'MÃ KHÔNG ÁP DỤNG - CHỈ ÁP DỤNG MỖI THÁNG 1 LẦN' END
+	END 
+	---------------------------
+	ELSE IF (EXISTS (SELECT MaKH FROM  DONHANG D WHERE @MAKH = MaKH AND D.TrangThai=N'đã giao' GROUP BY MaKH HAVING COUNT(D.MaDH)> 4) AND (@LOAIKHACHHANG =1 ))
+	BEGIN
+	IF ((SELECT COUNT(MaGiamGia_DH) FROM DONHANG WHERE @MAKH = MaKH AND MaGiamGia_DH LIKE '%GG_DB%' AND MONTH(NgayDat)=MONTH(GETDATE())) = 0 )
+	BEGIN
+	INSERT INTO GIAMGIA_DONHANG(MaGiamGia_DH, GiaTri,LoaiGiaTri,SoLuongMa,GiaTri_ToiThieu,GiamToiDa,TGBatDau,TGKetThuc,TrangThai)
+	VALUES (@MAGIAMGIA_DH_DB,300000,'GIATRI',1,0,300000,@StartTime,@EndTime,1)
+    INSERT INTO DONHANG (MaDH, MaKH, MaGiamGia_DH, MaDiaChi)
+	VALUES (@MADH,@MAKH,@MAGIAMGIA_DH_DB,@MADIACHI)
+	END
+	ELSE BEGIN PRINT N'MÃ KHÔNG ÁP DỤNG - CHỈ ÁP DỤNG MỖI THÁNG 1 LẦN' END
+	END 
+	------------------------PHẦN CHO KHÁCH HÀNG BÌNH THƯỜNG-------------------------------
+	ELSE 
+	BEGIN
+		PRINT N'GIA TRI MA KHONG DUOC AP DUNG'
+	INSERT INTO DONHANG (MaDH, MaKH, MaGiamGia_DH, MaDiaChi)
+	VALUES (@MADH,@MAKH,@MAGIAMGIA_DH,@MADIACHI)
+	END
+
+	
+	
+    ----------------------------PHẦN CHO INSERT CHITIET_THANHTOAN-----------------------------------------------------------
+	IF EXISTS( SELECT * FROM THANHTOAN T  WHERE @MATHANHTOAN = T.MaThanhToan)
+	BEGIN
+	 IF EXISTS(SELECT * FROM THANHTOAN T WHERE LoaiThanhToan = N'Chuyển khoản')
+	 BEGIN
+	 INSERT INTO CHITIET_THANHTOAN(MaThanhToan,MaDH,NgayThanhToan)
+	VALUES (@MATHANHTOAN,@MADH,GETDATE());
+	 END
+	 ELSE 
+	 BEGIN
+	  INSERT INTO CHITIET_THANHTOAN(MaThanhToan,MaDH)
+	VALUES (@MATHANHTOAN,@MADH);
+	 END
+	END
+	ELSE BEGIN PRINT N'MÃ THANH TOÁN KHÔNG TỒN TẠI!!!'END;
+	---------------------------PHẦN CHO INSERT CHITIET_DONHANG---------------------------------------
+    INSERT INTO CHITIET_DONHANG (MADH, MaSP, MaGiamGia_DM, SoLuong)
+    SELECT @MADH, XTbl.Col.value('MASP[1]', 'VARCHAR(10)'),
+           XTbl.Col.value('MAGIAMGIA_DM[1]', 'VARCHAR(10)'),
+           XTbl.Col.value('SOLUONG[1]', 'INT')
+    FROM @XMLData.nodes('/Root/Item') AS XTbl(Col)
+ ------------------------------PHẦN UPDATE TỒN KHO CHO SẢN PHẨM------
+ IF @@ROWCOUNT > 0 -- Kiểm tra số hàng bị ảnh hưởng bởi INSERT CHITIET_DONHANG
+BEGIN
+    UPDATE Sanpham
+    SET TonKho = Sanpham.TonKho - XTbl.Col.value('SOLUONG[1]', 'INT')
+    FROM @XMLData.nodes('/Root/Item') AS XTbl(Col)
+    WHERE Sanpham.MaSP = XTbl.Col.value('MASP[1]', 'VARCHAR(10)');
+END
+-----------------PHẦN CHO LOẠI BỎ SẢN PHẨM KHỎI GIỎ HÀNG -------
+IF @@ROWCOUNT > 0 -- Kiểm tra số hàng bị ảnh hưởng bởi INSERT CHITIET_DONHANG
+BEGIN
+		DELETE GIOHANG
+		 FROM @XMLData.nodes('/Root/Item') AS XTbl(Col)
+		WHERE GIOHANG.MaSanPham = XTbl.Col.value('MASP[1]', 'VARCHAR(10)') AND GIOHANG.MaKH = @MAKH ;
+END
+
+END;
+
+
+DECLARE @XMLData XML = '
+<Root>
+<Item>
+<MASP>C01</MASP>
+<MAGIAMGIA_DM >DM01</MAGIAMGIA_DM> 
+<SOLUONG>2</SOLUONG>
+</Item>
+<Item>
+<MASP>C05</MASP>
+<MAGIAMGIA_DM >DM01</MAGIAMGIA_DM>
+<SOLUONG>5</SOLUONG>
+</Item>
+</Root>'
+
+EXEC PROC_DONHANG_CTDH_CTTT_INSERT @MAKH = 'A001',
+                                   @MAGIAMGIA_DH = NULL,
+                                   @MADIACHI = 'LD13',
+								   @MATHANHTOAN = 'TT015',
+                                   @XMLData = @XMLData,
+								   @LOAIKHACHHANG = 1
+
+
+----
+DROP PROC PROC_DANHSACHKHACHHANGTHEODONHANG_XEPHANG
+
+
+------Tạo một Proc, cho phép nhập vào lựa chọn và tháng, truy xuất ra khách hàng và gán xếp hàng cho khách hàng. Lựa chọn ở đây được chọn là toàn hệ thống và chọn theo tháng 
+CREATE PROCEDURE PROC_DANHSACHKHACHHANGTHEODONHANG_XEPHANG
+(@CHON BIT,@THANG INT) --- CHON =1 VÀ THÁNG KHÔNG NULL THÌ NHẬP THEO THÁNG , NGƯỢC LẠI LÀ TOÀN HỆ THỐNG 
+AS
+BEGIN
+	
+	DECLARE @XEPHANG TABLE 
+	(MAKH VARCHAR(10),TONGTIENCHI DECIMAL(16,2),XEPHANG VARCHAR(15))
+	IF (@CHON =1 )
+	BEGIN
+	INSERT INTO @XEPHANG(MAKH,TONGTIENCHI)
+	SELECT MAKH = DONHANG.MaKH,TONGTIENCHI=SUM(DONHANG.ThanhTien) FROM DONHANG WHERE MONTH(NgayDat) = @THANG
+	GROUP BY DONHANG.MaKH
+	UPDATE @XEPHANG
+	SET XEPHANG= (CASE
+	WHEN X.TONGTIENCHI > 300000 THEN ('VANG')
+	WHEN X.TONGTIENCHI >= 200000 AND X.TONGTIENCHI <=300000 THEN ('BAC')
+	WHEN X.TONGTIENCHI > 100000 AND X.TONGTIENCHI <= 200000 THEN ('DONG')
+	ELSE ('CO BAN')
+	END
+	)
+	FROM @XEPHANG X
+	SELECT * FROM  @XEPHANG
+	ORDER BY CASE XEPHANG 
+				WHEN 'VANG' THEN 1
+				WHEN 'BAC' THEN 2
+				WHEN 'DONG' THEN 3
+				ELSE 4
+				END;
+	END
+	IF(@CHON=0)
+	BEGIN
+	INSERT INTO @XEPHANG(MAKH,TONGTIENCHI)
+	SELECT MAKH = DONHANG.MaKH, TONGTIENCHI=SUM(DONHANG.ThanhTien) FROM DONHANG
+	GROUP BY DONHANG.MaKH
+	UPDATE @XEPHANG
+	SET XEPHANG= (CASE
+	WHEN X.TONGTIENCHI > 300000 THEN ('VANG')
+	WHEN X.TONGTIENCHI >= 200000 AND X.TONGTIENCHI <=300000 THEN ('BAC')
+	WHEN X.TONGTIENCHI > 100000 AND X.TONGTIENCHI <= 200000 THEN ('DONG')
+	ELSE ('CO BAN')
+	END
+	)
+	FROM @XEPHANG X
+	SELECT * FROM  @XEPHANG
+	ORDER BY CASE XEPHANG 
+				WHEN 'VANG' THEN 1
+				WHEN 'BAC' THEN 2
+				WHEN 'DONG' THEN 3
+				ELSE 4
+				END;
+
+	END
+END
+
+EXEC PROC_DANHSACHKHACHHANGTHEODONHANG_XEPHANG 0,2
+---------------------------------------------------TAO DIEU KIEN LOC THEO 3 TIEU CHI DANH GIA, KHOANG GIA VA DANHMUC -------------------------------
+----Tạo Proc, cho phép nhập vào tên sản phẩm,mã danh mục, khoảng giá  và đánh giá cùng với loại lọc và bộ lọc. Có 2 loại lọc là chính xác và tương đương, tương ứng với bộ lọc 
+----là kết quả tìm kiếm thuần hay kết quả tìm kiếm thông qua lọc. Tương ứng với từng loại lọc sẽ ra được kết quả theo danh mục, theo đánh giá, theo khoảng giá hay theo kết hợp 
+CREATE PROCEDURE PROC_COCHELOCDULIEUCHOKHACHHANG
+(@TENSP NVARCHAR(255),@GIAKD DECIMAL(16,2) ,@GIADUNG DECIMAL(16,2),@SODIEMDANHGIA INT, @MADANHMUC VARCHAR(MAX),@LOAILOC BIT,@BOLOC BIT)
+------- LOAI LOC LÀ 1 VÀ 0 TƯƠNG ÚNG LÀ CHÍNH XÁC VÀ KHÔNG CHÍNH XÁC 
+-------BOLOC LÀ 1 VÀ 0 LÀ CÓ SỬ DỤNG BỘ LỌC VÀ KHÔNG DÙNG BỘ LỌC ĐỂ TÌM KIẾM 
+AS
+BEGIN
+
+	   SET NOCOUNT ON;
+	   ---TAO BIEN BANG TAM CHUA MA DANH MUC
+	   DECLARE @MADANHMUCTAMP TABLE
+    (
+        MADANHMUC VARCHAR(10)
+    );
+	INSERT INTO @MADANHMUCTAMP (MADANHMUC)
+    SELECT value
+    FROM STRING_SPLIT(@MADANHMUC, ',');
+	-----------------------
+	   DECLARE @TAMPTENSP TABLE (MASP VARCHAR(10),MaDanhMuc VARCHAR(10),Ma_NCC VARCHAR(10),TenSP NVARCHAR(255),GiaSP NUMERIC(16,2) 
+	   ,TacGia NVARCHAR(255),Bia NVARCHAR(255),TonKho INT ,TGTao DATETIME,TGCapNhat DATETIME)
+	   INSERT INTO @TAMPTENSP
+	   SELECT * FROM SANPHAM WHERE TenSP LIKE @TENSP
+		IF(@BOLOC = 1)
+		BEGIN
+---------LOC CHINH XAC
+		-----LẤY KẾT QUẢ CHÍNH XÁC TỪ LỌC KHÔNG QUA KẾT QUẢ TÌM KIẾM---
+		IF(@TENSP IS NULL AND @LOAILOC = 0)
+	 	BEGIN
+		SELECT * FROM SANPHAM 
+		INNER JOIN DANHGIA D ON SANPHAM.MaSP = D.MaSP WHERE GiaSP BETWEEN ISNULL(@GIAKD,0) AND @GIADUNG AND D.MaSP 
+		IN(SELECT MaSP FROM DANHGIA WHERE SANPHAM.MaSP = DANHGIA.MaSP 
+		GROUP BY MaSP
+		HAVING AVG(SoDiem*1.0) >= @SODIEMDANHGIA) 
+		AND SANPHAM.MaSP IN (SELECT S.MaSP FROM SANPHAM S INNER JOIN DANHMUC D ON D.MaDanhMuc = S.MaDanhMuc WHERE D.MaDanhMuc IN (SELECT MADANHMUC FROM @MADANHMUCTAMP))
+		END
+			-----LẤY KẾT QUẢ CHÍNH XÁC TỪ LỌC  QUA KẾT QUẢ TÌM KIẾM---
+		ELSE IF(@TENSP IS NOT NULL AND @LOAILOC = 0)
+		BEGIN
+		
+		SELECT * FROM @TAMPTENSP T 
+		INNER JOIN DANHGIA D ON T.MaSP = D.MaSP WHERE GiaSP BETWEEN ISNULL(@GIAKD,0) AND @GIADUNG AND D.MaSP 
+		IN(SELECT MaSP FROM DANHGIA WHERE T.MaSP = DANHGIA.MaSP 
+		GROUP BY MaSP
+		HAVING AVG(SoDiem*1.0) >= @SODIEMDANHGIA) 
+		AND T.MaSP IN (SELECT S.MaSP FROM SANPHAM S INNER JOIN DANHMUC D ON D.MaDanhMuc = S.MaDanhMuc WHERE  D.MaDanhMuc IN (SELECT MADANHMUC FROM @MADANHMUCTAMP) )
+		END
+--------LOC TUONG DUONG
+		-----LẤY KẾT QUẢ TƯƠNG ĐƯƠNG TỪ LỌC MÀ KHÔNG QUA KẾT QUẢ TÌM KIẾM---
+	ELSE IF(@TENSP IS NULL AND @LOAILOC = 1)
+		BEGIN
+		SELECT DISTINCT SANPHAM.* FROM SANPHAM
+		INNER JOIN DANHGIA ON SANPHAM.MaSP = DANHGIA.MaSP
+		WHERE
+			(@GIAKD IS NULL OR SANPHAM.GiaSP >= @GIAKD) AND
+			(@GIADUNG IS NULL OR SANPHAM.GiaSP <= @GIADUNG) AND
+			(@SODIEMDANHGIA IS NULL OR EXISTS (
+				SELECT 1
+				FROM DANHGIA
+				WHERE SANPHAM.MaSP = DANHGIA.MaSP
+				GROUP BY DANHGIA.MaSP
+				HAVING AVG(CAST(DANHGIA.SoDiem AS FLOAT)) >= @SODIEMDANHGIA
+			)) AND
+			(@MADANHMUC IS NULL OR EXISTS (
+				SELECT 1
+				FROM DANHMUC
+				WHERE SANPHAM.MaDanhMuc = DANHMUC.MaDanhMuc
+					AND DANHMUC.MaDanhMuc IN (SELECT MADANHMUC FROM @MADANHMUCTAMP)
+			));
+			END
+			-----LẤY KẾT QUẢ TƯƠNG ĐƯƠNG TỪ LỌC  QUA KẾT QUẢ TÌM KIẾM---
+	ELSE IF (@TENSP IS NOT NULL AND @LOAILOC = 1)
+			BEGIN
+			SELECT DISTINCT T.* FROM @TAMPTENSP T
+		INNER JOIN DANHGIA ON T.MaSP = DANHGIA.MaSP
+		WHERE
+			(@GIAKD IS NULL OR T.GiaSP >= @GIAKD) AND
+			(@GIADUNG IS NULL OR T.GiaSP <= @GIADUNG) AND
+			(@SODIEMDANHGIA IS NULL OR EXISTS (
+				SELECT 1
+				FROM DANHGIA
+				WHERE T.MaSP = DANHGIA.MaSP
+				GROUP BY DANHGIA.MaSP
+				HAVING AVG(CAST(DANHGIA.SoDiem AS FLOAT)) >= @SODIEMDANHGIA
+			)) AND
+			(@MADANHMUC IS NULL OR EXISTS (
+				SELECT 1
+				FROM DANHMUC
+				WHERE T.MaDanhMuc = DANHMUC.MaDanhMuc
+					AND DANHMUC.MaDanhMuc IN (SELECT MADANHMUC FROM @MADANHMUCTAMP)
+			));
+			
+		END
+		END
+-------LÁY SẢN PHẨM TỪ KẾT QUẢ TÌM KIẾM MÀ KHÔNG LỌC ------------
+		ELSE
+		BEGIN
+		SELECT * FROM @TAMPTENSP
+		END
+																	
+END
+DROP PROC PROC_COCHELOCDULIEUCHOKHACHHANG
+
+DECLARE @MADANHMUCGA VARCHAR(MAX) = 'D01,D02';
+EXEC PROC_COCHELOCDULIEUCHOKHACHHANG N'%trẻ%',0,200000,4,@MADANHMUCGA,1,0
+
+-----Tạo Proc,khách hàng nhập vào tổng số tiền để mua combo, đồng thời lựa chọn các danh mục muốn mua, hệ thống đưa ra được gợi ý về các sản phẩm tương ứng
+
+CREATE PROCEDURE PROC_DANHMUC_SANPHAM_TONGSOTIEN
+    @TONGSOTIEN NUMERIC(16,2),
+    @DANHMUC VARCHAR(100) --- CÓ THỂ LỰA CHỌN NHIỀU DANH MỤC 
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @DANHMUCGOIY TABLE (
+        MaSP VARCHAR(10),
+        TenSP NVARCHAR(255),
+        GiaSP NUMERIC(16,2)
+    );
+
+    DECLARE @DANHMUCSP TABLE (
+        DANHMUCSP VARCHAR(10)
+    );
+    
+    -- INSERT DU LIEU VAO BANG TAM CHUA MA DANH MUC 
+    INSERT INTO @DANHMUCSP (DANHMUCSP)
+    SELECT value
+    FROM STRING_SPLIT(@DANHMUC, ',');
+    
+    DECLARE @DANHMUCRIENG VARCHAR(10);
+    DECLARE @GIA NUMERIC(16,2);
+    DECLARE @GIATONGHIENTAI NUMERIC(16,2);
+    SET @GIATONGHIENTAI = 0;
+
+    WHILE EXISTS (SELECT 1 FROM SANPHAM WHERE MaDanhMuc IN (SELECT DANHMUCSP FROM @DANHMUCSP)) AND @GIATONGHIENTAI <= @TONGSOTIEN
+    BEGIN
+        SELECT TOP 1 @DANHMUCRIENG = MaDanhMuc, @GIA = GiaSP
+        FROM SANPHAM 
+        WHERE MaDanhMuc IN (SELECT DANHMUCSP FROM @DANHMUCSP)
+        ORDER BY GiaSP ASC;
+
+      
+           INSERT INTO @DANHMUCGOIY (MaSP, TenSP, GiaSP)
+			SELECT DISTINCT MaSP, TenSP, GiaSP
+			FROM (
+				SELECT DISTINCT sp.MaSP, sp.TenSP, sp.GiaSP, 
+					   SUM(sp.GiaSP) OVER (ORDER BY sp.GiaSP ASC) AS CTONG
+				FROM SANPHAM sp
+				WHERE sp.GiaSP <= @TONGSOTIEN+20000 - @GIATONGHIENTAI AND SP.MaDanhMuc IN (SELECT DANHMUCSP FROM @DANHMUCSP )
+			) AS T
+			WHERE CTONG <= @TONGSOTIEN+20000;
+
+        IF @GIATONGHIENTAI > = @TONGSOTIEN	+20000	
+        BEGIN
+        --THOAT VONG LAP
+            BREAK;
+        END
+		SET @GIATONGHIENTAI = @GIATONGHIENTAI + @GIA;
+        -- XOA DANH MUC VUA XU LY
+        DELETE FROM @DANHMUCSP WHERE DANHMUCSP = @DANHMUCRIENG;
+		SET @GIATONGHIENTAI = (SELECT SUM(GiaSP) FROM @DANHMUCGOIY)
+    END
+    
+    ---------DUA RA DANH SACH----
+	IF (SELECT COUNT(*) FROM @DANHMUCGOIY)=0
+	BEGIN
+	PRINT N'KHÔNG CÓ SẢN PHẨM NÀO PHÙ HỢP - SỐ TIỀN ĐƯA RA KHÔNG PHÙ HỢP HOẶC KHÔNG TỒN TẠI DANH MỤC SẢN PHẨM '
+	END
+	ELSE
+	BEGIN
+    SELECT  DISTINCT*
+    FROM @DANHMUCGOIY 
+	END
+END;
+
+DROP PROC PROC_DANHMUC_SANPHAM_TONGSOTIEN
+
+EXEC PROC_DANHMUC_SANPHAM_TONGSOTIEN  100000, @DANHMUC = 'D01,D02,D03';
+
+----- VIẾT PROCEDURE CẬP NHẬT GIÁ SẢN PHẨM DƯẠ TRÊN TÌM KIẾM TƯƠNG ĐƯƠNG HOẶC TÌM KIẾM CHÍNH XÁC VỚI MÃ SP VÀ TÊN SP, TÊN DANH MỤC VÀ MÃ DANH MỤC VỚI HỆ SỐ [-1,1]
+CREATE PROCEDURE PROC_CAPNHATGIASANPHAM_DANHMUCSP
+(@TENSP NVARCHAR(255),@MASP VARCHAR(10),@TENDANHMUC NVARCHAR(255),@MADANHMUC VARCHAR(10),@HESO FLOAT) 
+---- TÌM KIẾM SẢN PHÂM DỰA THEO TÊN VÀ MÃ , DỰA THEO DANH MỤC VÀ MÃ DANH MỤC
+AS
+BEGIN
+	---tạo bảng tạm chưa kết quả truy xuất 
+	DECLARE @TAMPDANHMUCTD TABLE
+	(MASP VARCHAR(10),MaDanhMuc VARCHAR(10),Ma_NCC VARCHAR(10),TenSP NVARCHAR(255),GiaSP NUMERIC(16,2) 
+	   ,TacGia NVARCHAR(255),Bia NVARCHAR(255),TonKho INT ,TGTao DATETIME,TGCapNhat DATETIME)
+
+	   INSERT INTO @TAMPDANHMUCTD
+	   SELECT * FROM SANPHAM WHERE MASP IN (SELECT MaSP FROM SANPHAM WHERE (@TENSP IS NOT NULL AND @MASP IS NULL AND TenSP LIKE @TENSP) 
+	   OR 
+	   (@TENSP IS NOT NULL AND @MASP IS NOT NULL AND MaSP IN (SELECT MASP FROM SANPHAM WHERE TENSP LIKE @TENSP))
+	   OR
+	   (@TENDANHMUC IS NOT NULL AND @MADANHMUC IS NULL 
+	   AND MaDanhMuc IN (SELECT S.MaDanhMuc FROM SANPHAM S INNER JOIN DANHMUC D ON D.MaDanhMuc =S.MaDanhMuc WHERE D.TenDanhmuc LIKE @TENDANHMUC  ))
+	   OR 
+	   (@TENDANHMUC IS NOT NULL AND @MADANHMUC IS NOT NULL 
+	   AND MaDanhMuc IN (SELECT S.MaDanhMuc FROM SANPHAM S INNER JOIN DANHMUC D ON D.MaDanhMuc =S.MaDanhMuc WHERE D.TenDanhmuc LIKE @TENDANHMUC  )))
+	   
+
+	   IF(@HESO>=-1 AND @HESO<=1)
+	   BEGIN
+	   ------update giá theo sản phẩm cụ thể
+	   IF (@TENDANHMUC IS NULL AND @MADANHMUC IS NULL)
+	   BEGIN
+		UPDATE SANPHAM
+		SET GiaSP = GiaSP + @HESO*GiaSP
+		FROM SANPHAM 
+		WHERE  MASP IN (SELECT MaSP FROM SANPHAM WHERE  ((@TENSP IS NULL OR @TENSP IS NOT NULL) AND @MASP IS NOT NULL AND MaSP = @MASP)
+		OR
+		(@TENSP IS NOT NULL AND @MASP IS NULL AND MaSP IN (SELECT MaSP FROM @TAMPDANHMUCTD))	
+		)
+		SELECT * FROM @TAMPDANHMUCTD
+		SELECT * FROM SANPHAM WHERE MaSP = @MASP
+	   END
+	   -----update giá theo danh mục 
+	   ELSE IF (@TENSP IS NULL AND @MASP IS NULL)
+	   BEGIN
+	   UPDATE SANPHAM
+		SET GiaSP = GiaSP + @HESO*GiaSP
+		FROM SANPHAM 
+		WHERE  MASP IN (SELECT MaSP FROM SANPHAM WHERE ((@TENDANHMUC IS NULL OR @TENDANHMUC IS NOT NULL )AND @MADANHMUC IS NOT NULL AND MaSP IN (SELECT MASP FROM SANPHAM WHERE @MADANHMUC = MaDanhMuc))
+		OR 
+		(@TENDANHMUC IS NOT NULL AND @MADANHMUC IS NULL  AND MaSP IN (SELECT MaSP FROM @TAMPDANHMUCTD)))
+		SELECT * FROM @TAMPDANHMUCTD
+		SELECT * FROM SANPHAM WHERE MaDanhMuc = @MADANHMUC
+	   END
+	   ELSE 
+	  BEGIN PRINT N'KHÔNG TỒN TẠI MÃ SẢN PHẨM HOẶC TÊN SẢN PHẨM THEO YÊU CẦU !' END
+	   END
+	   ELSE 
+	   BEGIN
+	   PRINT N'HỆ SỐ KHÔNG ĐÚNG!'
+	   END
+END;
+DROP PROC PROC_CAPNHATGIASANPHAM_DANHMUCSP
+EXEC PROC_CAPNHATGIASANPHAM_DANHMUCSP N'%TRẺ%',NULL,NULL,NULL,-0.75
+------------------
+----------------TẠO MỘT PROCEDURE TÍNH TỔNG DOANH THU CỦA TỪNG SẢN PHẨM THEO MÃ DANH MỤC HOẶC THEO TẤT CẢ TRONG KHOẢNG THỜI GIAN XÁC ĐỊNH, ĐƯA RA DOANH THU TỔNG CHO TỪNG LỰA CHỌN ----------
+CREATE PROCEDURE PROC_DOANHTHUTUNGSANPHAM_DANHMUC
+    @TGBATDAU DATETIME,
+    @TGKETTHUC DATETIME,
+    @MADANHMUC VARCHAR(MAX) = NULL,
+	@LOAISANPHAM VARCHAR(30)  
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    
+    CREATE TABLE #TRUYVANCHITIETDON (
+        MADANHMUC VARCHAR(1000),
+        MASP VARCHAR(1000),
+        TENSP NVARCHAR(1000),
+        TONGTATCA NUMERIC(16, 2)
+    );
+	IF (@MADANHMUC IS NULL)
+	BEGIN
+    -- Tính tổng doanh thu cho toàn bộ danh mục
+    INSERT INTO #TRUYVANCHITIETDON (MADANHMUC, MASP, TENSP, TONGTATCA)
+    SELECT  D2.MaDanhMuc AS	N'Tất cả' , C.MaSP AS N'Tất cả',  S.TenSP N'Tất cả' , SUM(C.DonGia) AS TotalRevenue
+    FROM CHITIET_DONHANG C
+	INNER JOIN DONHANG D ON C.MaDH = D.MaDH
+	LEFT JOIN SANPHAM S ON S.MaSP = C.MaSP 
+	INNER JOIN DANHMUC D2 ON D2.MaDanhMuc = S.MaDanhMuc
+    WHERE D.NgayGiao >= @TGBATDAU AND D.NgayGiao <= @TGKETTHUC
+    GROUP BY D2.MaDanhMuc, C.MaSP, S.TenSP,D2.TenDanhmuc;
+	---CÁC SẢN PHẨM CHƯA BÁN ĐƯỢC 
+	INSERT INTO #TRUYVANCHITIETDON (MADANHMUC, MASP, TENSP, TONGTATCA)
+	SELECT D2.MaDanhMuc AS N'Tất cả', S.MaSP AS N'Tất cả', S.TenSP AS N'Tất cả', 0 AS TONGTATCA
+	FROM SANPHAM S
+		INNER JOIN DANHMUC D2 ON D2.MaDanhMuc = S.MaDanhMuc
+	WHERE S.MaSP NOT IN (SELECT DISTINCT C.MaSP FROM CHITIET_DONHANG C);
+	END
+    -- Tính tổng doanh thu cho từng danh mục
+    IF @MADANHMUC IS NOT NULL
+    BEGIN
+        DECLARE @LISTDANHMUC TABLE (MADANHMUC VARCHAR(10));
+        INSERT INTO @LISTDANHMUC (MADANHMUC)
+        SELECT value FROM STRING_SPLIT(@MADANHMUC, ',');
+
+        DECLARE @MADANHMUCHT VARCHAR(10);
+        DECLARE @DEM INT = 1;
+        DECLARE @TONGDANHMUC INT = (SELECT COUNT(*) FROM @LISTDANHMUC);
+
+        WHILE @DEM <= @TONGDANHMUC
+        BEGIN
+            
+			SET @MADANHMUCHT = (SELECT TOP 1 MaDanhMuc FROM @LISTDANHMUC);
+
+            INSERT INTO #TRUYVANCHITIETDON (MaDanhMuc, MASP, TENSP, TONGTATCA)
+            SELECT  S.MaDanhMuc, C.MaSP, S.TenSP, SUM(C.DonGia)
+            FROM CHITIET_DONHANG C
+			INNER JOIN DONHANG D ON D.MaDH = C.MaDH
+			INNER JOIN SANPHAM S ON S.MaSP = C.MaSP
+			INNER JOIN DANHMUC D2 ON D2.MaDanhMuc = S.MaDanhMuc
+            WHERE S.MaDanhMuc = @MADANHMUCHT
+                AND D.NgayGiao >= @TGBATDAU AND D.NgayGiao <= @TGKETTHUC
+            GROUP BY S.MaDanhMuc, C.MaSP, S.TenSP;
+			--------------------------------------
+			INSERT INTO #TRUYVANCHITIETDON (MADANHMUC, MASP, TENSP, TONGTATCA)
+			SELECT D2.MaDanhMuc, S.MaSP , S.TenSP , 0 AS TONGTATCA
+			FROM SANPHAM S
+				INNER JOIN DANHMUC D2 ON D2.MaDanhMuc = S.MaDanhMuc
+			WHERE S.MaSP NOT IN (SELECT DISTINCT C.MaSP FROM CHITIET_DONHANG C)
+			AND S.MaDanhMuc = @MADANHMUCHT;
+			DELETE FROM @LISTDANHMUC WHERE MaDanhMuc = @MADANHMUCHT;
+
+
+            SET @DEM = @DEM + 1;
+        END;
+		
+    END;
+		
+    -- Lấy kết quả từ bảng tạm
+	IF (@LOAISANPHAM = 'TATCA')
+	BEGIN
+    SELECT MADANHMUC, MASP, TENSP, TONGTATCA
+    FROM #TRUYVANCHITIETDON
+    ORDER BY MADANHMUC,TONGTATCA DESC;
+
+    -- Hiển thị tổng tất cả bên dưới
+    SELECT N'Tất cả' AS MaDanhMuc, N'Tất cả' AS MaSanPham, N'Tổng tất cả' AS TenSanPham, SUM(TONGTATCA) AS N'TỔNG' 
+    FROM #TRUYVANCHITIETDON;
+	END
+	ELSE IF (@LOAISANPHAM = 'KHONGBANDUOC')
+	BEGIN
+	SELECT MADANHMUC, MASP, TENSP, TONGTATCA
+    FROM #TRUYVANCHITIETDON
+	WHERE TONGTATCA =0
+    ORDER BY MADANHMUC,TONGTATCA DESC;
+	END
+    -- Xóa bảng tạm
+    DROP TABLE #TRUYVANCHITIETDON;
+END;
+
+
+EXEC PROC_DOANHTHUTUNGSANPHAM_DANHMUC '2022/01/01', '2023/12/31','D01,D02,D03,D04','TATCA';
+DROP PROC PROC_DOANHTHUTUNGSANPHAM_DANHMUC
+------------------------------------------------------------------------------------------------
+
+-----TẠO PROCEDURE NHẰM GỢI Ý CHO KHÁCH HÀNG VỀ SẢN PHẨM SẼ MUA, DỰA TRÊN LỊCH SỬ MUA HÀNG MÀ CHỌN RA DANH MỤC THÍCH NHẤT, LẤY CÁC SẢN PHẨM
+---CÒN LẠI TRONG DANH MỤC ĐÓ RỒI ĐƯA RA GỢI Ý CHO KHÁCH HÀNG. NẾU MAKH LÀ NULL SẼ ĐƯA RA GỢI Ý CHO TOÀN BỘ KHÁCH HÀNG 
+
+CREATE PROCEDURE PROC_DANHSACHGOIY_DONHANG_KHACHHANG_DANHMUC
+    @MaKH VARCHAR(10) = NULL
+AS
+BEGIN
+    IF @MaKH IS NULL
+    BEGIN
+        -- @MaKH là NULL, truy xuất tất cả khách hàng và danh mục được mua nhiều nhất của họ
+        SELECT K.MaKH, K.TenKH, D2.TenDanhMuc AS DANHMUCUATHICH
+        INTO #DANHMUCTHICHNHAT
+        FROM KHACHHANG K
+        INNER JOIN (
+            SELECT D.MaKH, CT.MaSP, SP.MaDanhMuc, ROW_NUMBER() OVER (PARTITION BY D.MaKH ORDER BY COUNT(CT.MaSP) DESC) AS SODONG
+            FROM DONHANG D
+            INNER JOIN CHITIET_DONHANG CT ON CT.MaDH = D.MaDH
+            INNER JOIN SANPHAM SP ON SP.MaSP = CT.MaSP
+            GROUP BY D.MaKH, CT.MaSP, SP.MaDanhMuc
+        ) AS S ON S.MaKH = K.MaKH AND S.SODONG = 1
+        INNER JOIN DANHMUC D2 ON D2.MaDanhMuc = S.MaDanhMuc
+
+        -- Truy xuất danh sách các sản phẩm chưa mua cho từng khách hàng trong danh mục được mua nhiều nhất của họ
+        DECLARE @TONGDEM INT = (SELECT COUNT(*) FROM #DANHMUCTHICHNHAT)
+        DECLARE @DEM INT = 1
+
+        WHILE @DEM <= @TONGDEM
+        BEGIN
+            DECLARE @DEMMAKH VARCHAR(MAX)
+            DECLARE @DEMTENKH NVARCHAR(MAX)
+            DECLARE @DEMDANHMUCUATHICH NVARCHAR(MAX)
+
+            SELECT @DEMMAKH = MaKH, @DEMTENKH = TenKH, @DEMDANHMUCUATHICH = DANHMUCUATHICH
+            FROM (
+                SELECT MaKH, TenKH, DANHMUCUATHICH, ROW_NUMBER() OVER (ORDER BY MaKH) AS SODONG
+                FROM #DANHMUCTHICHNHAT
+            ) AS T1
+            WHERE SODONG = @DEM
+
+            DECLARE @TAMPSANPHAMGOIY TABLE (MaKH VARCHAR(MAX), TenKH NVARCHAR(MAX), DEMDANHMUCUATHICH NVARCHAR(MAX), MaSP VARCHAR(MAX), TenSP NVARCHAR(MAX))
+
+            INSERT INTO @TAMPSANPHAMGOIY (MaKH, TenKH, DEMDANHMUCUATHICH, MaSP, TenSP)
+            SELECT @DEMMAKH, @DEMTENKH, @DEMDANHMUCUATHICH, S.MaSP, S.TenSP
+            FROM SANPHAM S
+            WHERE S.MaDanhMuc = (
+                SELECT MaDanhMuc
+                FROM DANHMUC
+                WHERE TenDanhMuc = @DEMDANHMUCUATHICH
+            ) AND S.MaSP NOT IN (
+                SELECT CT.MaSP
+                FROM CHITIET_DONHANG CT
+                INNER JOIN DONHANG DH ON DH.MaDH = CT.MaDH
+                WHERE DH.MaKH = @DEMMAKH
+            )
+
+            SET @DEM = @DEM + 1
+        END
+
+        -- Đưa ra kết quả
+        SELECT * FROM @TAMPSANPHAMGOIY
+
+        DROP TABLE #DANHMUCTHICHNHAT
+    END
+    ELSE
+    BEGIN
+        -- Đối với trường hợp mã khách hàng không null
+        DECLARE @MADANHMUC1 VARCHAR(255)
+
+        SELECT @MADANHMUC1 = S.MaDanhMuc
+        FROM (
+            SELECT D.MaKH, CT.MaSP, SP.MaDanhMuc, ROW_NUMBER() OVER (PARTITION BY D.MaKH ORDER BY COUNT(CT.MaSP) DESC) AS SODONG
+            FROM DONHANG D
+            INNER JOIN CHITIET_DONHANG CT ON CT.MaDH = D.MaDH
+            INNER JOIN SANPHAM SP ON SP.MaSP = CT.MaSP
+            WHERE D.MaKH = @MaKH
+            GROUP BY D.MaKH, CT.MaSP, SP.MaDanhMuc
+        ) AS S
+        INNER JOIN DANHMUC D2 ON D2.MaDanhMuc = S.MaDanhMuc
+        WHERE S.SODONG = (
+            SELECT MAX(SODONG)
+            FROM (
+                SELECT DH.MaKH, SP.MaDanhMuc, COUNT(CT.MaSP) AS SODONG
+                FROM DONHANG DH
+                INNER JOIN CHITIET_DONHANG CT ON CT.MaDH = DH.MaDH
+                INNER JOIN SANPHAM SP ON SP.MaSP = CT.MaSP
+                WHERE DH.MaKH = @MaKH
+                GROUP BY DH.MaKH, SP.MaDanhMuc
+            ) AS SODONG
+            WHERE SODONG.MaKH = @MaKH
+        )
+
+        -- Truy xuất danh sách các sản phẩm chưa mua cho khách hàng được chỉ định trong danh mục được mua nhiều nhất của họ
+        SELECT S.MaSP, S.TenSP, S.GiaSP, S.TacGia, S.Bia, S.TonKho
+        FROM SANPHAM S
+        WHERE S.MaDanhMuc = @MADANHMUC1
+        AND S.MaSP NOT IN (
+            SELECT CT.MaSP
+            FROM CHITIET_DONHANG CT
+            INNER JOIN DONHANG D ON D.MaDH = CT.MaDH
+            WHERE D.MaKH = @MaKH
+        )
+    END
+END;
+
+
+EXEC PROC_DANHSACHGOIY_DONHANG_KHACHHANG_DANHMUC NULL
+DROP PROC PROC_DANHSACHGOIY_DONHANG_KHACHHANG_DANHMUC
+
+----------------------------------------------------------------------
+
+CREATE PROCEDURE PROC_DANHSACHGOIY_DONHANG_KHACHHANG_NHACUNGCAP
+    @MaKH VARCHAR(10) = NULL
+AS
+BEGIN
+    IF @MaKH IS NULL
+    BEGIN
+        --  @MaKH là NULL, truy xuất tất cả khách hàng và nhà cung cấp ưa thích nhất của họ
+        SELECT K.MaKH, K.TenKH, NCC.Ten_NCC AS NHACUNGCAPUATHICH
+        INTO #NHACUNGCAPUATHICH
+        FROM KHACHHANG K
+        INNER JOIN (
+            SELECT D.MaKH, CT.MaSP, SP.Ma_NCC, ROW_NUMBER() OVER (PARTITION BY D.MaKH ORDER BY COUNT(CT.MaSP) DESC) AS SODONG
+            FROM DONHANG D
+            INNER JOIN CHITIET_DONHANG CT ON CT.MaDH = D.MaDH
+            INNER JOIN SANPHAM SP ON SP.MaSP = CT.MaSP
+            GROUP BY D.MaKH, CT.MaSP, SP.Ma_NCC
+        ) AS S ON S.MaKH = K.MaKH AND S.SODONG = 1
+        INNER JOIN NHACUNGCAP NCC ON NCC.Ma_NCC = S.Ma_NCC
+
+        -- Truy xuất danh sách các sản phẩm chưa mua cho từng khách hàng từ nhà cung cấp ưa thích nhất của họ
+        DECLARE @TONGDEM INT = (SELECT COUNT(*) FROM #NHACUNGCAPUATHICH)
+        DECLARE @DEM INT = 1
+
+        WHILE @DEM <= @TONGDEM
+        BEGIN
+            DECLARE @DEMMAKH VARCHAR(MAX)
+            DECLARE @DEMTENKH NVARCHAR(MAX)
+            DECLARE @DEMNHACUNGCAPUATHICH NVARCHAR(MAX)
+
+            SELECT @DEMMAKH = MaKH, @DEMTENKH = TenKH, @DEMNHACUNGCAPUATHICH = NHACUNGCAPUATHICH
+            FROM (
+                SELECT MaKH, TenKH, NHACUNGCAPUATHICH, ROW_NUMBER() OVER (ORDER BY MaKH) AS SODONG
+                FROM #NHACUNGCAPUATHICH
+            ) AS T1
+            WHERE SODONG = @DEM
+
+            DECLARE @TAMPSANPHAMGOIY TABLE (MaKH VARCHAR(MAX), TenKH NVARCHAR(MAX), NHACUNGCAPUATHICH NVARCHAR(MAX), MaSP VARCHAR(MAX), TenSP NVARCHAR(MAX))
+
+            INSERT INTO @TAMPSANPHAMGOIY (MaKH, TenKH, NHACUNGCAPUATHICH, MaSP, TenSP)
+            SELECT @DEMMAKH, @DEMTENKH, @DEMNHACUNGCAPUATHICH, S.MaSP, S.TenSP
+            FROM SANPHAM S
+            WHERE S.Ma_NCC = (
+                SELECT Ma_NCC
+                FROM NHACUNGCAP
+                WHERE Ten_NCC = @DEMNHACUNGCAPUATHICH
+            ) AND S.MaSP NOT IN (
+                SELECT CT.MaSP
+                FROM CHITIET_DONHANG CT
+                INNER JOIN DONHANG DH ON DH.MaDH = CT.MaDH
+                WHERE DH.MaKH = @DEMMAKH
+            )
+
+            SET @DEM = @DEM + 1
+        END
+
+        -- Đưa ra kết quả
+        SELECT * FROM @TAMPSANPHAMGOIY
+
+        DROP TABLE #NHACUNGCAPUATHICH
+    END
+    ELSE
+    BEGIN
+        -- Đối với trường hợp mã khách hàng không null
+        DECLARE @TENNHACUNGCAP NVARCHAR(255)
+
+        SELECT @TENNHACUNGCAP = NCC.Ten_NCC
+        FROM KHACHHANG K
+        INNER JOIN (
+            SELECT D.MaKH, CT.MaSP, SP.Ma_NCC, ROW_NUMBER() OVER (PARTITION BY D.MaKH ORDER BY COUNT(CT.MaSP) DESC) AS SODONG
+            FROM DONHANG D
+            INNER JOIN CHITIET_DONHANG CT ON CT.MaDH = D.MaDH
+            INNER JOIN SANPHAM SP ON SP.MaSP = CT.MaSP
+            WHERE D.MaKH = @MaKH
+            GROUP BY D.MaKH, CT.MaSP, SP.Ma_NCC
+        ) AS S ON S.MaKH = K.MaKH AND S.SODONG = 1
+        INNER JOIN NHACUNGCAP NCC ON NCC.Ma_NCC = S.Ma_NCC
+
+        -- Truy xuất danh sách các sản phẩm chưa mua cho khách hàng được chỉ định từ nhà cung cấp ưa thích nhất của họ
+        SELECT S.MaSP, S.TenSP , S.GiaSP, S.TacGia, S.Bia, S.TonKho
+        FROM SANPHAM S
+        WHERE S.Ma_NCC = (
+            SELECT Ma_NCC
+            FROM NHACUNGCAP 
+            WHERE Ten_NCC = @TENNHACUNGCAP
+        ) AND S.MaSP NOT IN (
+            SELECT CT.MaSP
+            FROM CHITIET_DONHANG CT
+            INNER JOIN DONHANG D ON D.MaDH = CT.MaDH
+            WHERE D.MaKH = @MaKH
+        )
+    END
+END;
+EXEC PROC_DANHSACHGOIY_DONHANG_KHACHHANG_NHACUNGCAP NULL
+
+-----------TẠO PROCEDURE THÊM MỚI HOẶC UPDATE CHO BẢNG SẢN PHẨM, BẢNG DANH MỤC VÀ BẢNG NHÀ CUNG CẤP CÙNG VỚI LỰA CHỌN TƯƠNG ỨNG, MASP, MANCC VÀ MADANHMUC ĐƯỢC TẠO TỰD DỘNG
+CREATE PROCEDURE PROC_INSERT_SANPHAM_DANHMUC_NCC
+(@MaSPCu VARCHAR(10) = NULL,
+    @MaDanhMucCu VARCHAR(10) = NULL,
+    @MaNCCCu VARCHAR(10) = NULL,
+    @TenSP NVARCHAR(100),
+    @GiaSP DECIMAL(18, 2),
+    @TacGia NVARCHAR(100),
+    @Bia NVARCHAR(100),
+    @TonKho INT,
+    @TenDanhMucMoi NVARCHAR(100) = NULL,
+    @TenNCCMoi NVARCHAR(100) = NULL,
+	@LUACHON VARCHAR(40))
+	AS
+	BEGIN
+	SET NOCOUNT ON;
+	DECLARE @MADANHMUCMOI VARCHAR(10)
+    DECLARE @MANCCMOI VARCHAR(10)
+	DECLARE @MASPMOI VARCHAR(10)
+    DECLARE @MOITAO BIT = 0
+
+    WHILE @MOITAO = 0
+    BEGIN
+        SET @MASPMOI = CONCAT('C', SUBSTRING(CONVERT(VARCHAR(255), NEWID()), 1, 10))
+		SET @MADANHMUCMOI = CONCAT('D',SUBSTRING(CONVERT(VARCHAR(255), NEWID()), 1, 10) )
+		SET @MANCCMOI = SUBSTRING(CONVERT(VARCHAR(255), NEWID()), 1, 10)
+
+        IF NOT EXISTS (SELECT 1 FROM SANPHAM WHERE MaSP = @MASPMOI)
+        BEGIN
+            SET @MOITAO = 1
+        END
+		IF NOT EXISTS (SELECT 1 FROM NHACUNGCAP WHERE Ma_NCC = @MANCCMOI)
+		BEGIN
+		SET @MOITAO =1
+		END
+		IF NOT EXISTS (SELECT 1 FROM DANHMUC WHERE MaDanhMuc = @MADANHMUCMOI)
+		BEGIN
+		SET @MOITAO =1
+		END
+    END
+
+
+	IF (@LUACHON='THEMMOIDM' AND @MaNCCCu IS NOT NULL)
+	BEGIN
+	INSERT INTO DANHMUC
+	VALUES(@MADANHMUCMOI,@TenDanhMucMoi)
+	INSERT INTO SANPHAM (MaSP, TenSP, GiaSP, TacGia, Bia, TonKho, MaDanhMuc, Ma_NCC)
+	VALUES (@MASPMOI,@TenSP,@GiaSP,@TacGia,@Bia,@TonKho,@MADANHMUCMOI,@MaNCCCu)
+	END
+	ELSE IF (@LUACHON= 'THEMMOINCC' AND @MaDanhMucCu IS NOT NULL)
+	BEGIN
+	INSERT INTO NHACUNGCAP(Ma_NCC,Ten_NCC)
+	VALUES(@MANCCMOI,@TenNCCMoi)
+
+	INSERT INTO SANPHAM (MaSP, TenSP, GiaSP, TacGia, Bia, TonKho, MaDanhMuc, Ma_NCC)
+	VALUES (@MASPMOI,@TenSP,@GiaSP,@TacGia,@Bia,@TonKho,@MaDanhMucCu,@MANCCMOI)
+	END
+
+	ELSE IF (@LUACHON = 'THEMALL')
+	BEGIN
+	INSERT INTO DANHMUC
+	VALUES(@MADANHMUCMOI,@TenDanhMucMoi)
+	INSERT INTO NHACUNGCAP(Ma_NCC,Ten_NCC)
+	VALUES(@MANCCMOI,@TenNCCMoi)
+	INSERT INTO SANPHAM (MaSP, TenSP, GiaSP, TacGia, Bia, TonKho, MaDanhMuc, Ma_NCC)
+	VALUES (@MASPMOI,@TenSP,@GiaSP,@TacGia,@Bia,@TonKho,@MADANHMUCMOI,@MANCCMOI)
+	END
+	ELSE IF (@LUACHON = 'UPDATESP')
+	BEGIN
+	UPDATE SANPHAM
+	SET TenSP = @TenSP,
+		TonKho = @TonKho,
+		GiaSP = @GiaSP,
+		TacGia = @TacGia,
+		Bia = @Bia
+	FROM SANPHAM
+	WHERE MaSP = @MaSPCu AND @TenSP IS NOT NULL AND @TonKho IS NOT NULL
+	END
+	ELSE 
+	BEGIN
+	PRINT'KHÔNG THỂ HOẠT ĐỘNG'
+	END
+	END;
+	EXEC PROC_INSERT_SANPHAM_DANHMUC_NCC
+	@MaSPCu = NULL ,
+    @MaDanhMucCu ='D03',
+    @MaNCCCu =NULL,
+    @TenSP = N'Bộ sách trẻ em phiên bản 2023',
+    @GiaSP = 230000,
+    @TacGia = N'Xuân Quốc',
+    @Bia = N'Cứng' ,
+    @TonKho = 100,
+    @TenDanhMucMoi = N'BACKEND',
+    @TenNCCMoi = N'XUANQUOCVERSIONMAX',
+	@LUACHON ='THEMMOINCC'
+
+-----------------------------
+CREATE PROCEDURE PROC_XEMLICHSUKHACHHANG
+    @MAKH VARCHAR(10),
+    @LUACHON INT, -- 1: XEM BẢNG ĐƠN HÀNG, 2: XEM BẢNG ĐÁNH GIÁ, 3: XEM CHI TIẾT THANH TOÁN , 4: XEM CHI TIẾT ĐƠN HÀNG 
+    @TGBATDAU DATETIME = NULL,---NULL THÌ XEM TOÀN BỘ 
+    @TGKETTHUC DATETIME = NULL--- NULL THÌ XEM TOÀN BỘ 
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF @LUACHON = 1 
+    BEGIN
+        IF @TGBATDAU IS NULL AND @TGKETTHUC IS NULL
+        BEGIN
+            SELECT DH.MaDH, DH.NgayDat, DH.TrangThai, O.TIEN 
+            FROM DONHANG DH
+            LEFT JOIN (
+                SELECT MaDH, SUM(ThanhTien) AS TIEN 
+                FROM DONHANG
+                WHERE MaKH = @MAKH
+                GROUP BY MaDH
+            ) O ON DH.MaDH = O.MaDH
+            WHERE DH.MaKH = @MAKH
+            UNION ALL
+            SELECT NULL, NULL, NULL, SUM(ThanhTien) AS TONGTIEN 
+            FROM DONHANG
+            WHERE MaKH = @MAKH;
+        END
+        ELSE
+        BEGIN
+            SELECT DH.MaDH, DH.NgayDat, DH.TrangThai, O.TIEN
+            FROM DONHANG DH
+            LEFT JOIN (
+                SELECT MaDH, SUM(ThanhTien) AS TIEN
+                FROM DONHANG
+                WHERE MaKH = @MAKH
+                GROUP BY MaDH
+            ) O ON DH.MaDH = O.MaDH
+            WHERE DH.MaKH = @MAKH
+            AND DH.NgayDat BETWEEN @TGBATDAU AND @TGKETTHUC
+            UNION ALL
+            SELECT NULL, NULL, N'TỔNG MUA: ', SUM(ThanhTien) AS TONGTIEN
+            FROM DONHANG
+            WHERE MaKH = @MAKH
+            AND NgayDat BETWEEN @TGBATDAU AND @TGKETTHUC;
+        END
+    END
+    ELSE IF @LUACHON = 2 
+    BEGIN
+        IF @TGBATDAU IS NULL AND @TGKETTHUC IS NULL
+        BEGIN
+            SELECT DG.MaDH, DG.MaSP, DG.NoiDung, DG.SoDiem, DG.NgayDanhGia
+            FROM DANHGIA DG
+            INNER JOIN DONHANG DH ON DG.MaDH = DH.MaDH
+            WHERE DH.MaKH = @MAKH;
+        END
+        ELSE
+        BEGIN
+            SELECT DG.MaDH, DG.MaSP, DG.NoiDung, DG.SoDiem, DG.NgayDanhGia
+            FROM DANHGIA DG
+            INNER JOIN DONHANG DH ON DG.MaDH = DH.MaDH
+            WHERE DH.MaKH = @MAKH
+            AND DG.NgayDanhGia BETWEEN @TGBATDAU AND @TGKETTHUC;
+        END
+    END
+    ELSE IF @LUACHON = 3
+    BEGIN
+        IF @TGBATDAU IS NULL AND @TGKETTHUC IS NULL
+        BEGIN
+            SELECT CT.MaThanhToan, CT.MaDH, CT.NgayThanhToan, CT.TrangThai_TT
+            FROM CHITIET_THANHTOAN CT
+            INNER JOIN DONHANG DH ON CT.MaDH = DH.MaDH
+            WHERE DH.MaKH = @MAKH;
+        END
+        ELSE
+        BEGIN
+            SELECT CT.MaThanhToan, CT.MaDH, CT.NgayThanhToan, CT.TrangThai_TT
+            FROM CHITIET_THANHTOAN CT
+            INNER JOIN DONHANG DH ON CT.MaDH = DH.MaDH
+            WHERE DH.MaKH = @MAKH
+            AND CT.NgayThanhToan BETWEEN @TGBATDAU AND @TGKETTHUC;
+        END
+    END
+    ELSE IF @LUACHON = 4 
+    BEGIN
+        IF @TGBATDAU IS NULL AND @TGKETTHUC IS NULL
+        BEGIN
+            SELECT DH.MaDH, CT.MaSP, CT.SoLuong, CT.DonGia, CT.LuongGiam
+            FROM DONHANG DH
+            INNER JOIN CHITIET_DONHANG CT ON DH.MaDH = CT.MaDH
+            WHERE DH.MaKH = @MAKH;
+        END
+        ELSE
+        BEGIN
+            SELECT DH.MaDH, CT.MaSP, CT.SoLuong, CT.DonGia, CT.LuongGiam
+            FROM DONHANG DH
+            INNER JOIN CHITIET_DONHANG CT ON DH.MaDH = CT.MaDH
+            WHERE DH.MaKH = @MAKH
+            AND DH.NgayDat BETWEEN @TGBATDAU AND @TGKETTHUC;
+        END
+    END
+END;
+EXEC PROC_XEMLICHSUKHACHHANG 'A013',4,NULL ,NULL
+DROP PROCEDURE PROC_XEMLICHSUKHACHHANG
+
+-------------------TẠO MỘT PROCEDURE CHO PHÉP KHÁCH HÀNG XEM ĐƯỢC CÁC MÃ GIẢM GIÁ HIỆN TẠI DỰA TRÊN ĐƠN HÀNG, DANH MỤC SẢN PHẨM  ------------
+CREATE PROCEDURE PROC_XEM_MA_GIAM_GIA
+    @Option INT,
+    @MaDanhMuc VARCHAR(10) = NULL,
+	@NoiDung NVARCHAR(100) 
+AS
+BEGIN
+    IF @Option = 1
+    BEGIN
+	 IF @MaDanhMuc IS  NULL OR @NoiDung IS NULL OR ( @MaDanhMuc IS  NULL AND @NoiDung IS NULL)
+        BEGIN
+        -- Option 1: Xem mã giảm giá đơn hàng
+        SELECT*
+        FROM GIAMGIA_DONHANG
+        WHERE TrangThai = 1 OR GIAMGIA_DONHANG.NoiDung LIKE @NoiDung ;
+		END
+    END
+    ELSE IF @Option = 2
+    BEGIN
+        -- Option 2: Xem mã giảm giá danh mục dựa trên mã danh mục sản phẩm
+        IF @MaDanhMuc IS NOT NULL OR @NoiDung IS NOT NULL
+        BEGIN
+            SELECT GD.MaGiamGia_DM, GD.GiaTri, GD.TGBatDau, GD.TGKetThuc
+            FROM GIAMGIA_DANHMUC GD
+			INNER JOIN DANHMUC_GIAM G ON G.MaGiamGia_DM = GD.MaGiamGia_DM
+            WHERE G.MaDanhMuc = @MaDanhMuc OR GD.NoiDung LIKE @NoiDung;
+        END
+        ELSE
+        BEGIN
+            PRINT 'Vui lòng cung cấp mã danh mục sản phẩm!';
+        END
+    END
+	 ELSE IF @Option = 3
+    BEGIN
+       
+       IF (@MaDanhMuc IS NOT NULL OR @NoiDung IS NOT NULL)
+	   BEGIN
+		DECLARE @TAMPGIAMGIA TABLE (MAGIAMGIA VARCHAR(10),GIATRI DECIMAL(16,2),TGBATDAU DATETIME,TGKETTHUC DATETIME,LOAIMA VARCHAR(100) )
+			INSERT INTO @TAMPGIAMGIA
+            SELECT GD.MaGiamGia_DM  , GD.GiaTri  , GD.TGBatDau, GD.TGKetThuc, 'DANHMUC'
+            FROM GIAMGIA_DANHMUC GD
+			INNER JOIN DANHMUC_GIAM G ON G.MaGiamGia_DM = GD.MaGiamGia_DM
+            WHERE (G.MaDanhMuc = @MaDanhMuc OR GD.NoiDung LIKE @NoiDung) AND GD.TrangThai =1 ;
+
+			INSERT INTO @TAMPGIAMGIA
+			 SELECT MaGiamGia_DH, GiaTri, TGBatDau, TGKetThuc,'DONHANG'
+			FROM GIAMGIA_DONHANG
+			WHERE TrangThai = 1 OR (GIAMGIA_DONHANG.NoiDung LIKE @NoiDung) ;
+			SELECT * FROM @TAMPGIAMGIA
+        END
+        ELSE
+        BEGIN
+            PRINT 'Vui lòng cung cấp mã danh mục sản phẩm!';
+        END
+    END
+    ELSE
+    BEGIN
+        -- Option không hợp lệ
+        PRINT 'Option không hợp lệ!';
+    END
+END;
+EXEC PROC_XEM_MA_GIAM_GIA 3,NULL,N'%KHAI%'
+
+--------------------------------TẠO PROCEDURE CHO PHÉP XEM ĐƯỢC ĐÁNNH GIÁ THEO SẢN PHẨM HOẶC THEO DANH MỤC DỰA TRÊN SỐ ĐIỀM VÀ KHOẢNG THỜI GIAN CỤ THỂ ------------
+CREATE PROCEDURE PROC_TINH_TRUNG_BINH_DANH_GIA
+    @LUACHON INT = 1,
+    @DiemMin TINYINT = 1,
+    @DiemMax TINYINT = 5,
+	@TGbatdau DATETIME,
+	@TGketthuc DATETIME
+AS
+BEGIN
+    IF @LUACHON = 1
+    BEGIN
+	IF (@TGbatdau IS NULL AND @TGketthuc IS NULL OR (@TGbatdau IS NULL OR @TGketthuc IS NULL))
+	BEGIN
+        -- Tính trung bình số điểm đánh giá theo từng sản phẩm
+        SELECT SP.MaSP, SP.TenSP, AVG(DG.SoDiem*1.0) AS TrungBinhDiemDanhGia
+        INTO #TrungBinhTheoSanPham
+        FROM SANPHAM SP
+        LEFT JOIN DANHGIA DG ON SP.MaSP = DG.MaSP
+        WHERE DG.SoDiem BETWEEN @DiemMin AND @DiemMax
+        GROUP BY SP.MaSP, SP.TenSP;
+        
+        -- In kết quả trung bình số điểm theo sản phẩm
+        SELECT * FROM #TrungBinhTheoSanPham;
+        
+        -- Xóa bảng tạm
+        DROP TABLE IF EXISTS #TrungBinhTheoSanPham;
+	
+	END
+	ELSE IF (@TGbatdau IS NOT NULL AND @TGketthuc IS NOT NULL)
+	BEGIN
+	  -- Tính trung bình số điểm đánh giá theo từng sản phẩm
+        SELECT SP.MaSP, SP.TenSP, AVG(DG.SoDiem*1.0) AS TrungBinhDiemDanhGia
+        INTO #TrungBinh_SPTHOIGIAN
+        FROM SANPHAM SP
+        LEFT JOIN DANHGIA DG ON SP.MaSP = DG.MaSP
+        WHERE DG.SoDiem BETWEEN @DiemMin AND @DiemMax AND DG.NgayDanhGia BETWEEN @TGbatdau AND @TGketthuc
+        GROUP BY SP.MaSP, SP.TenSP;
+        
+        -- In kết quả trung bình số điểm theo sản phẩm
+        SELECT * FROM #TrungBinh_SPTHOIGIAN;
+        
+        -- Xóa bảng tạm
+        DROP TABLE IF EXISTS #TrungBinh_SPTHOIGIAN;
+	END
+    END
+    ELSE IF @LUACHON = 2
+    BEGIN
+	IF (@TGbatdau IS NULL AND @TGketthuc IS NULL OR (@TGbatdau IS NULL OR @TGketthuc IS NULL))
+	BEGIN
+        -- Tính trung bình số điểm đánh giá theo từng danh mục
+        SELECT SP.MaDanhMuc, DM.TenDanhMuc, AVG(DG.SoDiem*1.0) AS TrungBinhDiemDanhGia
+        INTO #TrungBinhTheoDanhMuc
+        FROM SANPHAM SP
+        LEFT JOIN DANHGIA DG ON SP.MaSP = DG.MaSP
+        LEFT JOIN DANHMUC DM ON SP.MaDanhMuc = DM.MaDanhMuc
+        WHERE DG.SoDiem BETWEEN @DiemMin AND @DiemMax
+        GROUP BY SP.MaDanhMuc, DM.TenDanhMuc;
+
+
+        
+        -- In kết quả trung bình số điểm theo danh mục
+        SELECT * FROM #TrungBinhTheoDanhMuc;
+        
+        -- Xóa bảng tạm
+        DROP TABLE IF EXISTS #TrungBinhTheoDanhMuc;
+    END
+	ELSE IF (@TGbatdau IS NOT NULL AND @TGketthuc IS NOT NULL)
+	BEGIN
+	 -- Tính trung bình số điểm đánh giá theo từng danh mục
+        SELECT SP.MaDanhMuc, DM.TenDanhMuc, AVG(DG.SoDiem*1.0) AS TrungBinhDiemDanhGia
+        INTO #TrungBinh_DANHMUC_TG
+        FROM SANPHAM SP
+        LEFT JOIN DANHGIA DG ON SP.MaSP = DG.MaSP
+        LEFT JOIN DANHMUC DM ON SP.MaDanhMuc = DM.MaDanhMuc
+        WHERE DG.SoDiem BETWEEN @DiemMin AND @DiemMax AND DG.NgayDanhGia BETWEEN @TGbatdau AND @TGketthuc
+        GROUP BY SP.MaDanhMuc, DM.TenDanhMuc;
+
+        -- In kết quả trung bình số điểm theo danh mục
+        SELECT * FROM #TrungBinh_DANHMUC_TG;
+        
+        -- Xóa bảng tạm
+        DROP TABLE IF EXISTS #TrungBinh_DANHMUC_TG;
+	END
+	END
+END;
+exec PROC_TINH_TRUNG_BINH_DANH_GIA 1,1,5,NULL,NULL
+drop proc PROC_TINH_TRUNG_BINH_DANH_GIA
+
+--- tạo một procedure ,thêm một đánh giá 
+CREATE PROCEDURE PROC_THEM_DANH_GIA
+    @MaSP INT,
+    @SoDiem TINYINT,
+    @NgayDanhGia DATETIME
+AS
+BEGIN
+    -- Kiểm tra xem sản phẩm có tồn tại không
+    IF EXISTS (SELECT 1 FROM SANPHAM WHERE MaSP = @MaSP)
+    BEGIN
+        -- Thêm đánh giá mới vào bảng DANHGIA
+        INSERT INTO DANHGIA (MaSP, SoDiem, NgayDanhGia)
+        VALUES (@MaSP, @SoDiem, @NgayDanhGia);
+        
+        -- In thông báo thành công
+        PRINT 'Thêm đánh giá thành công!';
+    END
+    ELSE
+    BEGIN
+        -- In thông báo lỗi nếu sản phẩm không tồn tại
+        PRINT 'Sản phẩm không tồn tại!';
+    END
+END;
+----- thêm địa chỉ nhận 
+CREATE PROCEDURE PROC_THEM_DIA_CHI_NHAN
+    @TenKhachHang NVARCHAR(100),
+    @DiaChi NVARCHAR(200),
+    @SoDienThoai NVARCHAR(20)
+AS
+BEGIN
+    -- Kiểm tra xem khách hàng có tồn tại không
+    IF EXISTS (SELECT 1 FROM KHACHHANG WHERE TenKhachHang = @TenKhachHang)
+    BEGIN
+        -- Thêm địa chỉ nhận mới vào bảng DIACHINHAN
+        INSERT INTO DIACHINHAN (TenKhachHang, DiaChi, SoDienThoai)
+        VALUES (@TenKhachHang, @DiaChi, @SoDienThoai);
+        
+        -- In thông báo thành công
+        PRINT 'Thêm địa chỉ nhận thành công!';
+    END
+    ELSE
+    BEGIN
+        -- In thông báo lỗi nếu khách hàng không tồn tại
+        PRINT 'Khách hàng không tồn tại!';
+    END
+END;
+BACKUP DATABASE CUAHANGSACH_ONLINE TO DISK = 'D:\MyDatabase.bak';
